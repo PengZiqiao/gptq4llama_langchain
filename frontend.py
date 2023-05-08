@@ -3,10 +3,11 @@ import requests
 from sseclient import SSEClient
 import json
 from pathlib import Path
+from config import LLM_HOST, LLM_PORT
 
 def request_chat(history):
     # 构建请求参数
-    url = "http://159.224.1.168:8887/chat/"
+    url = f"http://{LLM_HOST}:{LLM_PORT}/chat/"
     headers = {"Content-Type": "application/json"}
     data = json.dumps(history)
 
@@ -22,6 +23,7 @@ def chat():
     st.session_state["history"].append([content, ""])
     st.session_state["content"] = ""
 
+    # 请求后端，获得回复
     st.session_state["reply"] = request_chat(
         st.session_state["history"]
     )
