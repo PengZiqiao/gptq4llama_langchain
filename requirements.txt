@@ -1,0 +1,10 @@
+gradio
+streamlit
+langchain
+transformers
+torch
+safetensors
+pymilvus
+fastapi
+uvicorn
+sse_starlette

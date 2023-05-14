@@ -1,0 +1,10 @@
+{
+    "_type": "prompt",
+    "input_variables": [
+        "history",
+        "input" 
+    ],
+    "output_parser": null,
+    "template": "The following is a friendly conversation between a user and an assistant. The assistant is talkative. The assistant tend to think about the question step by step before answering it\n\nCurrent conversation:\n{history}\nUSER: {input}\nASISSTANT: ",
+    "template_format": "f-string"
+}

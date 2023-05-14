@@ -205,12 +205,12 @@ import requests
 import json
 from sseclient import SSEClient
 
-from config import LLM_HOST, LLM_PORT
+from config import LLM_HOST, LLM_PORT, GENERATE_PARAMS
 
 def generate(prompt):
     url = f"http://{LLM_HOST}:{LLM_PORT}/generate/"
     headers = {"Content-Type": "application/json"}
-    data = json.dumps(dict(prompt=prompt, params=dict(min_length=0, max_length=2048, temperature=0.1, top_p=0.75, top_k=40)))
+    data = json.dumps(dict(prompt=prompt, params=GENERATE_PARAMS))
 
     res = requests.post(url, headers=headers, data=data)
     return res.text
@@ -218,7 +218,7 @@ def generate(prompt):
 def streaming_generate(prompt):
     url = f"http://{LLM_HOST}:{LLM_PORT}/streaming_generate/"
     headers = {"Content-Type": "application/json"}
-    data = json.dumps(dict(prompt=prompt, params=dict(min_length=0, max_length=2048, temperature=0.1, top_p=0.75, top_k=40)))
+    data = json.dumps(dict(prompt=prompt, params=GENERATE_PARAMS))
 
     res = requests.post(url, headers=headers, data=data, stream=True)
     client = SSEClient(res).events()
