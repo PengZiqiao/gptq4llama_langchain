@@ -1,0 +1,10 @@
+{
+    "_type": "prompt",
+    "input_variables": [
+        "question",
+        "context"
+    ],
+    "output_parser": null,
+    "template": "The following is a friendly conversation between a user and an assistant.\nUSER: 已知```{context}```请回答: {question}\nASSISTANT:",
+    "template_format": "f-string"
+}

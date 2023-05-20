@@ -6,14 +6,16 @@ from threading import Thread
 import torch
 import transformers
 from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer
-from safetensors.torch import load_file as safe_load
 
 """
 git clone https://github.com/qwopqwop200/GPTQ-for-LLaMa
 ln -s GPTQ-for-LLaMa ${YOUR_PYTHON_SITEPACKAGES_DIR}/gptq4llama
 """
-from gptq4llama.utils.modelutils import find_layers
-from gptq4llama import quant
+from pathlib import Path
+import sys
+sys.path.insert(0, str(Path(__file__).parent/"repositories/GPTQ-for-LLaMa"))
+from utils.modelutils import find_layers
+import quant
 
 """
 Helpers to load GPTQ LLaMa model and support streaming generate output.
@@ -85,12 +87,13 @@ class Iteratorize:
         self.stop_now = True
 
 
-def load_quant(model, checkpoint, wbits=4, groupsize=128, exclude_layers=["lm_head"]):
+
+def load_quant(model, checkpoint, wbits, groupsize=-1, fused_mlp=True, eval=True, warmup_autotune=True):
     """
     This function is a replacement for the load_quant function in the
     GPTQ-for-LLaMa repository. It supports more models and branches.
     """
-
+    
     def noop(*args, **kwargs):
         pass
 
@@ -105,31 +108,47 @@ def load_quant(model, checkpoint, wbits=4, groupsize=128, exclude_layers=["lm_he
     torch.set_default_dtype(torch.half)
     transformers.modeling_utils._init_weights = False
     torch.set_default_dtype(torch.half)
-    model = AutoModelForCausalLM.from_config(config)
+    model = AutoModelForCausalLM.from_config(config, trust_remote_code=True)
     torch.set_default_dtype(torch.float)
-    model.eval()
+
+    if eval:
+        model = model.eval()
 
     # 找到模型中的所有线性层，排除一些不需要量化的层
     layers = find_layers(model)
-    for name in exclude_layers:
+    for name in ['lm_head']:
         if name in layers:
             del layers[name]
+
     # 对线性层进行量化
     quant.make_quant_linear(model, layers, wbits, groupsize)
     del layers
 
+    # 加载模型
     print("Loading model ...")
-    model.load_state_dict(safe_load(checkpoint), strict=False)
+    if checkpoint.endswith('.safetensors'):
+        from safetensors.torch import load_file as safe_load
+        model.load_state_dict(safe_load(checkpoint), strict=False)
+    else:
+        model.load_state_dict(torch.load(checkpoint), strict=False)
+
     quant.make_quant_attn(model)
+    if eval and fused_mlp:
+        quant.make_fused_mlp(model)
+    
+    if warmup_autotune:
+        quant.autotune_warmup_linear(model, transpose=not (eval))
+        if eval and fused_mlp:
+            quant.autotune_warmup_fused(model)
+
     model.seqlen = 2048
     print("Done.")
 
     return model
 
-
 class Vicuna:
-    def __init__(self, model_dir, checkpoint, **kwargs):
-        self.model, self.tokenizer = self.load_model(model_dir, checkpoint, **kwargs)
+    def __init__(self, model_dir, checkpoint):
+        self.model, self.tokenizer = self.load_model(model_dir, checkpoint, wbits=4, groupsize=128, fused_mlp=False, warmup_autotune=False)
 
     def load_model(self, model_dir, checkpoint, **kwargs):
         model = load_quant(model_dir, checkpoint, **kwargs).cuda()
@@ -139,7 +158,7 @@ class Vicuna:
     
     def __call__(self, prompt, streaming=False, **kwargs):
         # 构建参数
-        input_ids = self.tokenizer.encode(prompt, return_tensors="pt").cuda()
+        input_ids = self.tokenizer(prompt, return_tensors='pt').input_ids.to(torch.device('cuda'))
         generate_params = dict(input_ids=input_ids, **kwargs)
 
         if streaming:

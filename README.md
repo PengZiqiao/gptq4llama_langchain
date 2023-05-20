@@ -95,9 +95,9 @@ LLM_PORT = "8080"
 
 3. `/generate/` to get reply text.
 
-|  |  |
-| --- | --- |
-| Method | `POST` |
+|             |                                                     |
+| ----------- | --------------------------------------------------- |
+| Method      | `POST`                                              |
 | Requst body | <code>{"prompt": "string", <br>"params": {}}</code> |
 
 use requests.post to call the api
@@ -123,9 +123,9 @@ print(generate('Hello, bot!'))
 
 4. `/streaming_generate/` to get the streaming reply.
 
-|  |  |
-| --- | --- |
-| Method | `POST` |
+|             |                                                     |
+| ----------- | --------------------------------------------------- |
+| Method      | `POST`                                              |
 | Requst body | <code>{"prompt": "string", <br>"params": {}}</code> |
 
 use requests.post to call the api
@@ -144,15 +144,15 @@ def streaming_generate(prompt):
     client = SSEClient(res).events()
     return client
 
-form each in streaming_gerate('Hello, bot!'):
+for each in streaming_generate('Hello, bot!'):
     print(each.data)
 ```
 
 5. `/embed/` to get the embeddings
 
-|  |  |
-| --- | --- |
-| Method | `POST` |
+|             |                        |
+| ----------- | ---------------------- |
+| Method      | `POST`                 |
 | Requst body | `{"prompt": "string"}` |
 
 use requests.post to call the api
@@ -173,9 +173,9 @@ print(embed('Hello, bot!'))
 
 6. `/chat/` to make conversations
 
-|  |  |
-| --- | --- |
-| Method | `POST` |
+|             |                                                                                                                                             |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| Method      | `POST`                                                                                                                                      |
 | Requst body | <code>[['USER MESSAGE 1', 'ASSISTANT MESSAGE 1'], <br>['USER MESSAGE 2', 'ASSISTANT MESSAGE 2'], <br>... <br>['USER MESSAGE n', '']]</code> |
 
 use requests.post to call the api
@@ -238,7 +238,6 @@ query_result = embeddings.embed_query(query)
 
 ## TODO
 
-- [] loras using support
-- [] custom some langchain chains
-- [] custom some langchain agents
-
+- [ ] loras using support
+- [ ] custom some langchain chains
+- [ ] custom some langchain agents

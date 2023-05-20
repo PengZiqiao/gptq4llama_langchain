@@ -40,9 +40,7 @@ def clear():
 
 # 初始化
 if "content" not in st.session_state:
-    # 定义日志位置
     st.session_state["log"] = Path('log.txt')
-    # 初始化输入框与聊天记录
     clear()
 
 # 输入框和清空按钮
@@ -64,6 +62,7 @@ if st.session_state["history"]:
         reply = each.data
         final_reply.write(reply)
         st.session_state["history"][-1][1] = reply
+
     # 写入日志
     text = st.session_state["log"].read_text()
     text += f'{user_input}\n{reply}\n'
