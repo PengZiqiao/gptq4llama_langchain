@@ -5,18 +5,8 @@ from threading import Thread
 
 import torch
 import transformers
-from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer
 
-"""
-git clone https://github.com/qwopqwop200/GPTQ-for-LLaMa
-ln -s GPTQ-for-LLaMa ${YOUR_PYTHON_SITEPACKAGES_DIR}/gptq4llama
-"""
 from pathlib import Path
-import sys
-sys.path.insert(0, str(Path(__file__).parent/"repositories/GPTQ-for-LLaMa"))
-from utils.modelutils import find_layers
-import quant
-
 """
 Helpers to load GPTQ LLaMa model and support streaming generate output.
 Borrowed from https://github.com/oobabooga/text-generation-webui/
@@ -87,79 +77,97 @@ class Iteratorize:
         self.stop_now = True
 
 
+class GPTQModel:
+    def __init__(self, auto_type=False, **model_params):
+        self.model, self.tokenizer = self.load_model(auto_type, **model_params)
 
-def load_quant(model, checkpoint, wbits, groupsize=-1, fused_mlp=True, eval=True, warmup_autotune=True):
-    """
-    This function is a replacement for the load_quant function in the
-    GPTQ-for-LLaMa repository. It supports more models and branches.
-    """
-    
-    def noop(*args, **kwargs):
-        pass
+    def load_model(self, auto_type, **model_params):
+        """
+        git clone https://github.com/qwopqwop200/GPTQ-for-LLaMa
+        ln -s GPTQ-for-LLaMa gptq4llama_langchain/repositories/
+        """
+        import sys
+        sys.path.insert(0, str(Path(__file__).parent/"repositories/GPTQ-for-LLaMa"))
 
-    # 覆盖了一些随机初始化权重的torch函数，因为它们对于量化是不需要的。
-    config = AutoConfig.from_pretrained(model)
-    torch.nn.init.kaiming_uniform_ = noop
-    torch.nn.init.uniform_ = noop
-    torch.nn.init.normal_ = noop
+        if auto_type:
+            def _load_quant(model, checkpoint, wbits, groupsize=-1, fused_mlp=True, eval=True, warmup_autotune=True):
+                """
+                This function is a replacement for the load_quant function in the
+                GPTQ-for-LLaMa repository. It supports more models and branches.
+                Borrowed from https://github.com/oobabooga/text-generation-webui/
+                """
+                
+                def noop(*args, **kwargs):
+                    pass
 
-    # 默认数据类型设置为半精度（torch.half），以减少内存使用
-    # 创建模型后，恢复为单精度（torch.float），设置为评估模式（model.eval()）
-    torch.set_default_dtype(torch.half)
-    transformers.modeling_utils._init_weights = False
-    torch.set_default_dtype(torch.half)
-    model = AutoModelForCausalLM.from_config(config, trust_remote_code=True)
-    torch.set_default_dtype(torch.float)
+                from utils.modelutils import find_layers
+                import quant
+                from transformers import AutoConfig, AutoModelForCausalLM
 
-    if eval:
-        model = model.eval()
+                # 覆盖了一些随机初始化权重的torch函数，因为它们对于量化是不需要的。
+                config = AutoConfig.from_pretrained(model)
+                torch.nn.init.kaiming_uniform_ = noop
+                torch.nn.init.uniform_ = noop
+                torch.nn.init.normal_ = noop
 
-    # 找到模型中的所有线性层，排除一些不需要量化的层
-    layers = find_layers(model)
-    for name in ['lm_head']:
-        if name in layers:
-            del layers[name]
+                # 默认数据类型设置为半精度（torch.half），以减少内存使用
+                # 创建模型后，恢复为单精度（torch.float），设置为评估模式（model.eval()）
+                torch.set_default_dtype(torch.half)
+                transformers.modeling_utils._init_weights = False
+                torch.set_default_dtype(torch.half)
+                model = AutoModelForCausalLM.from_config(config, trust_remote_code=True)
+                torch.set_default_dtype(torch.float)
 
-    # 对线性层进行量化
-    quant.make_quant_linear(model, layers, wbits, groupsize)
-    del layers
+                if eval:
+                    model = model.eval()
 
-    # 加载模型
-    print("Loading model ...")
-    if checkpoint.endswith('.safetensors'):
-        from safetensors.torch import load_file as safe_load
-        model.load_state_dict(safe_load(checkpoint), strict=False)
-    else:
-        model.load_state_dict(torch.load(checkpoint), strict=False)
+                # 找到模型中的所有线性层，排除一些不需要量化的层
+                layers = find_layers(model)
+                for name in ['lm_head']:
+                    if name in layers:
+                        del layers[name]
 
-    quant.make_quant_attn(model)
-    if eval and fused_mlp:
-        quant.make_fused_mlp(model)
-    
-    if warmup_autotune:
-        quant.autotune_warmup_linear(model, transpose=not (eval))
-        if eval and fused_mlp:
-            quant.autotune_warmup_fused(model)
+                # 对线性层进行量化
+                quant.make_quant_linear(model, layers, wbits, groupsize)
+                del layers
 
-    model.seqlen = 2048
-    print("Done.")
+                # 加载模型
+                print("Loading model ...")
+                if checkpoint.endswith('.safetensors'):
+                    from safetensors.torch import load_file as safe_load
+                    model.load_state_dict(safe_load(checkpoint), strict=False)
+                else:
+                    model.load_state_dict(torch.load(checkpoint), strict=False)
 
-    return model
+                quant.make_quant_attn(model)
+                if eval and fused_mlp:
+                    quant.make_fused_mlp(model)
+                
+                if warmup_autotune:
+                    quant.autotune_warmup_linear(model, transpose=not (eval))
+                    if eval and fused_mlp:
+                        quant.autotune_warmup_fused(model)
 
-class Vicuna:
-    def __init__(self, model_dir, checkpoint):
-        self.model, self.tokenizer = self.load_model(model_dir, checkpoint, wbits=4, groupsize=128, fused_mlp=False, warmup_autotune=False)
+                model.seqlen = 2048
+                print("Done.")
 
-    def load_model(self, model_dir, checkpoint, **kwargs):
-        model = load_quant(model_dir, checkpoint, **kwargs).cuda()
-        tokenizer = AutoTokenizer.from_pretrained(model_dir, use_fast=False)
+                return model
+            load_quant = _load_quant
+        else:
+            from llama_inference import load_quant
+
+        model = load_quant(**model_params).cuda()
+
+        from transformers import AutoTokenizer
+        tokenizer = AutoTokenizer.from_pretrained(model_params['model'], use_fast=False)
 
         return model, tokenizer
     
     def __call__(self, prompt, streaming=False, **kwargs):
         # 构建参数
-        input_ids = self.tokenizer(prompt, return_tensors='pt').input_ids.to(torch.device('cuda'))
-        generate_params = dict(input_ids=input_ids, **kwargs)
+        input_ids = self.tokenizer(prompt, return_tensors='pt').to('cuda')
+        generate_params = dict(**input_ids, **kwargs)
+        len_input_ids = len(generate_params['input_ids'][0])
 
         if streaming:
             # 定义一个流式生成方法，
@@ -180,7 +188,7 @@ class Vicuna:
                             break
 
                         # 去掉结果中的prompt，只保留回复部分
-                        output_ids = output_ids[len(input_ids[0]):]
+                        output_ids = output_ids[len_input_ids:]
                         output = self.tokenizer.decode(output_ids, skip_special_tokens=True)
                         yield output
 
@@ -194,7 +202,7 @@ class Vicuna:
            
             # 去掉结果中的prompt，只保留回复部分
             output_ids = output_ids[0]
-            output_ids = output_ids[len(input_ids[0]):]
+            output_ids = output_ids[len_input_ids:]
             output = self.tokenizer.decode(output_ids, skip_special_tokens=True)
             return output
         
@@ -215,29 +223,29 @@ class Vicuna:
 
         return embeddings.tolist()[0]
 
-
 """
 使用requests调用fastapi接口
 """
-
 import requests
 import json
 from sseclient import SSEClient
 
 from config import LLM_HOST, LLM_PORT, GENERATE_PARAMS
 
-def generate(prompt):
+def generate(prompt, **params):
     url = f"http://{LLM_HOST}:{LLM_PORT}/generate/"
     headers = {"Content-Type": "application/json"}
-    data = json.dumps(dict(prompt=prompt, params=GENERATE_PARAMS))
+    params = GENERATE_PARAMS.copy().update(params)
+    data = json.dumps(dict(prompt=prompt, params=params))
 
     res = requests.post(url, headers=headers, data=data)
     return res.text
 
-def streaming_generate(prompt):
+def streaming_generate(prompt, **params):
     url = f"http://{LLM_HOST}:{LLM_PORT}/streaming_generate/"
     headers = {"Content-Type": "application/json"}
-    data = json.dumps(dict(prompt=prompt, params=GENERATE_PARAMS))
+    params = GENERATE_PARAMS.copy().update(params)
+    data = json.dumps(dict(prompt=prompt, params=params))
 
     res = requests.post(url, headers=headers, data=data, stream=True)
     client = SSEClient(res).events()
@@ -259,7 +267,7 @@ def embed(prompt):
 from typing import List
 from langchain.embeddings.base import Embeddings
 
-class VicunaEmbeddings(Embeddings):
+class GPTQEmbeddings(Embeddings):
     def embed_documents(self, texts: List[str]) -> List[List[float]]:
         return [embed(text) for text in texts]
 
@@ -269,24 +277,24 @@ class VicunaEmbeddings(Embeddings):
 
 from langchain.llms.base import LLM
 
-class VicunaLLM(LLM):
+class GPTQLLM(LLM):
     streaming: bool = False
     """Whether to stream the results or not."""
 
     @property
     def _llm_type(self) -> str:
-        return "Vicuna"
+        return "GPTQ"
     
-    def _call(self, prompt: str, stop: list = None, run_manager = None) -> str:
+    def _call(self, prompt: str, stop: list = None, run_manager = None, **params) -> str:
         if self.streaming:
             last_output = '' # 供 run_manager 获得 new_token 使用
-            for each in streaming_generate(prompt):
+            for each in streaming_generate(prompt, **params):
                 output = each.data
                 if run_manager:
-                    # 删除之前的输出，只保留新增内容
+                    # 删除之前的输出，只保留新增内容，仅当GENERATE_PARAMS['num_beams']=1时工作正常
                     new_token = output.replace(last_output, '') 
                     run_manager.on_llm_new_token(new_token)
                     last_output = output
             return output
         else:
-            return generate(prompt)
+            return generate(prompt, **params)

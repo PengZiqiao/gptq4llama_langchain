@@ -8,11 +8,25 @@ UVICORN_WORKERS = 16
 MILVUS_HOST = "159.224.1.168"
 MILVUS_PORT = "19530"
 
-# # chinese vicuna
-MODEL_DIR = "/data02/it/models/chinese_vicuna"
-CHECKPOINT = (
-    "/data02/it/models/chinese_vicuna/vicuna-13B-1.1-Chinese-GPTQ-4bit-128g.safetensors"
+# chinese vicuna
+AUTO_TYPE = True
+
+MODEL_PARAMS = dict(
+    model = "/data02/it/models/chinese_vicuna",
+    checkpoint = "/data02/it/models/chinese_vicuna/vicuna-13B-1.1-Chinese-GPTQ-4bit-128g.safetensors",
+    wbits=4, groupsize=128, fused_mlp=False, warmup_autotune=False
 )
+
+HUMAN_PREFIX = 'USER'
+AI_PREFIX = 'ASSISTANT'
+
+# stable vicuna
+# MODEL_DIR = "/data02/it/gptq4llama_langchain/models/stable-vicuna-13B-GPTQ"
+# CHECKPOINT = (
+#     "/data02/it/gptq4llama_langchain/models/stable-vicuna-13B-GPTQ/stable-vicuna-13B-GPTQ-4bit.compat.no-act-order.safetensors"
+# )
+# HUMAN_PREFIX = '### Human'
+# AI_PREFIX = '### Assistant'
 
 # belle bloom
 # MODEL_DIR = "/data02/it/models/BELLE_BLOOM_GPTQ_4BIT"
@@ -33,5 +47,5 @@ CHECKPOINT = (
 # )
 
 GENERATE_PARAMS = dict(
-    min_length=0, max_length=200, num_beams=10, temperature=0.1, top_p=0.75, top_k=50, repetition_penalty=1.2
+    min_length=0, max_length=2048, num_beams=1, temperature=0.1, top_p=0.75, top_k=50, repetition_penalty=1.2
 )

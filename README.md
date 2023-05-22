@@ -21,12 +21,12 @@ pip install -r requirements.txt
 ```
 
 **Step 3:**\
-The project depends on [GTPQ-for-LLaMa](https://github.com/qwopqwop200/GPTQ-for-LLaMa). You need to copy it or softlink it into the Python environment
+The project depends on [GTPQ-for-LLaMa](https://github.com/qwopqwop200/GPTQ-for-LLaMa). You need to copy it or softlink it into repositories
 
 ```bash
+cd repositories
 git clone https://github.com/qwopqwop200/GPTQ-for-LLaMa
 pip install -r GPTQ-for-LLaMa/requirements.txt
-ln -s GPTQ-for-LLaMa ENVIROMENT_DIR/lib/python3.9/site-packages/gptq4llama
 ```
 
 3. Prepare the model files, you can use (but not limited to) the following models: 
@@ -36,19 +36,17 @@ ln -s GPTQ-for-LLaMa ENVIROMENT_DIR/lib/python3.9/site-packages/gptq4llama
 - [koala-13B-GPTQ-4bit-128g](https://huggingface.co/TheBloke/koala-13B-GPTQ-4bit-128g)
 - [BELLE-7B-gptq](https://huggingface.co/BelleGroup/BELLE-7B-gptq)
 
-## Using Vicuna model class
+## Using GPTQ model class
 
-I used the model [vicuna-13b-GPTQ-4bit-128g](https://huggingface.co/anon8231489123/vicuna-13b-GPTQ-4bit-128g), so I named the class `Vicuna`. In fact, this class (perhaps) could also be used to load other models mentioned before.
-
-1. import the `Vicuna` class and create an instance.
+1. import the `GPTQ` class and create an instance.
 
 ```python
-from model import Vicuna
+from model import GPTQ
 
 model_dir = 'YOUR_MODEL_DIR'
 checkpoint = 'YOUR_MODEL_DIR/checkpoint_file'
 
-vic = Vicuna(model_dir, checkpoint)
+GPTQ(model_dir, checkpoint, wbits=4, groupsize=128)
 ```
 
 2. We define a method called `generate()`. This method has two parameters: `prompt` and `streaming`, which indicate the input prompt and whether streaming generation is enabled.
@@ -60,22 +58,22 @@ prompt = f"""A chat between a user and an assistant.
 USER: {content}
 ASSISTANT: """
 
-print(vic.generate(prompt))
+print(gptq.generate(prompt))
 ```
 
 3. Using streaming output(learn a lot from [text-generation-webui](https://github.com/oobabooga/text-generation-webui)), you get a generator. The full content is output every time. If you only want to keep the newly generated content, you need to manually remove the last output.
 
 ```python
 last_output = ''
-for output in vic.generate(prompt, streaming=True)：
-    print(output.replace(last_output, '')) 
+for output in gptq.generate(prompt, streaming=True)：
+    print(output.replace(last_output, ''), end='') 
     last_output = output
 ```
 
 4. We also define a method called `embed()` for representing the input text conversion vector. Used for similar search, classification, clustering, and other operations.
 
 ```python
-embeddings = vic.embed(prompt)
+embeddings = gptq.embed(prompt)
 ```
 
 ## Using API
@@ -93,7 +91,23 @@ LLM_HOST = "0.0.0.0"
 LLM_PORT = "8080"
 ```
 
-3. `/generate/` to get reply text.
+3. Other config should by modified
+
+```python
+AUTO_TYPE = False # True: use AutoConfig, AutoModelForCausalLM instead of LlamaConfig, LlamaForCausalLM to support more models; False: just import load_quant from GPTQ-for-LLaMa/llama_inference.py
+
+MODEL_PARAMS = dict(
+    model = "YOUR_MODEL_DIR",
+    checkpoint = "YOUR_MODEL_DIR/checkpoint_file",
+    wbits=4, groupsize=128, fused_mlp=False, warmup_autotune=False
+)
+
+# modify this according to your model's best prompts format
+HUMAN_PREFIX = 'USER'
+AI_PREFIX = 'ASSISTANT'
+```
+
+4. `/generate/` to get reply text.
 
 |             |                                                     |
 | ----------- | --------------------------------------------------- |
@@ -200,17 +214,18 @@ for each in chat([['Hello, bot!', '']]):
 
 # Using with langchain
 
-1. We provide a custom [langchain](https://github.com/hwchase17/langchain) LLM wrapper name VicunaLLM.
+1. We provide a custom [langchain](https://github.com/hwchase17/langchain) LLM wrapper name GPTQLLM.
 
 ```python
-from model import VicunaLLM
+from model import GPTQLLM
 from langchain import PromptTemplate
 from langchain.callbacks.manager import CallbackManager
 from langchain.callbacks.streaming_stdout import StreamingStdOutCallbackHandler
 
+# Do not set streaming=True if num_beam>1
 callback_manager = CallbackManager([StreamingStdOutCallbackHandler()])
-vic = VicunaLLM(streaming=True, callback_manager=callback_manager)
-vic("Hello, bot!")
+llm = GPTQLLM(streaming=True, callback_manager=callback_manager) 
+llm("Hello, bot!")
 ```
 
 For more details on how to use LLMs within LangChain, see the [LLM getting started guide](https://python.langchain.com/en/latest/modules/models/llms/getting_started.html).
@@ -218,12 +233,12 @@ For more details on how to use LLMs within LangChain, see the [LLM getting start
 2. We also provie a custom Embeddings Model
 
 ```python
-from model import VicunaEmbeddings
+from model import GPTQEmbeddings
 
 document = "This is a content of the document"
 query = "What is the contnt of the document?"
 
-embeddings = VicunaEmbeddings()
+embeddings = GPTQEmbeddings()
 
 doc_result = embeddings.embed_documents([document])
 query_result = embeddings.embed_query(query)

@@ -3,10 +3,10 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sse_starlette.sse import EventSourceResponse
 from pydantic import BaseModel
-from model import Vicuna
+from model import GPTQModel
 from langchain.prompts import load_prompt
-from config import MODEL_DIR, CHECKPOINT
-
+from config import HUMAN_PREFIX, AI_PREFIX
+from langchain.memory import ConversationBufferMemory
 
 app = FastAPI()
 
@@ -19,10 +19,8 @@ app.add_middleware(
 )
 
 # 载入模型
-vic = Vicuna(
-    model_dir=MODEL_DIR,
-    checkpoint=CHECKPOINT,
-)
+from config import AUTO_TYPE, MODEL_PARAMS
+gptq = GPTQModel(AUTO_TYPE, **MODEL_PARAMS)
 
 
 class GenerateParams(BaseModel):
@@ -32,35 +30,35 @@ class GenerateParams(BaseModel):
 
 @app.post("/generate/")
 async def generate(item: GenerateParams):
-    return vic(item.prompt, streaming=False, **item.params)
+    return gptq(item.prompt, streaming=False, **item.params)
 
 
 @app.post("/streaming_generate/")
 async def streaming_generate(item: GenerateParams):
     return EventSourceResponse(
-        vic(item.prompt, streaming=True, **item.params), media_type="text/event-stream"
+        gptq(item.prompt, streaming=True, **item.params), media_type="text/event-stream"
     )
 
 
 @app.post("/chat/")
 async def chat(history: list[list[str]]):
     # 构建prompt
-    history_text = "\n".join(
-        [f"USER: {x[0]}\nASSISTANT: {x[1]}" for x in history[-8:-1]]
-    )
-    content = history[-1][0]
+    memory = ConversationBufferMemory(human_prefix=HUMAN_PREFIX, ai_prefix=AI_PREFIX)
+    for human_text, ai_text in history[-10:-1]:
+        memory.save_context({'input':human_text}, {'output':ai_text})
+    history_text = memory.buffer
 
-    template = load_prompt("prompts/conversation.json")
-    prompt = template.format(history=history_text, input=content)
+    template = load_prompt("prompts/conversation.json", )
+    prompt = template.format(human_prefix=HUMAN_PREFIX, ai_prefix=AI_PREFIX, history=history_text, input=history[-1][0])
 
     # 构建生成参数
-    params = dict(min_length=0, max_length=2048, temperature=0.1, top_p=0.75, top_k=40)
+    params = dict(min_length=0, max_length=2048, num_beams=10, temperature=0.1, top_p=0.75, top_k=40)
 
     return EventSourceResponse(
-        vic(prompt, streaming=True, **params), media_type="text/event-stream"
+        gptq(prompt, streaming=True, **params), media_type="text/event-stream"
     )
 
 
 @app.post("/embed/")
 async def embed(item: GenerateParams):
-    return vic.embed(item.prompt)
+    return gptq.embed(item.prompt)
