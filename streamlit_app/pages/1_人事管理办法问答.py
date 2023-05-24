@@ -6,7 +6,7 @@ from langchain.prompts import load_prompt
 import sys
 sys.path.append('..')
 from config import MILVUS_HOST, MILVUS_PORT
-from model import streaming_generate, VicunaEmbeddings
+from model import streaming_generate, GPTQEmbeddings
 
 TOP_K = 5
 
@@ -55,7 +55,7 @@ def query():
 # 初始化
 if "vector_db" not in st.session_state:
     st.session_state["vector_db"] = Milvus(
-        VicunaEmbeddings(),
+        GPTQEmbeddings(),
         collection_name="HRDocs",
         connection_args={"host": MILVUS_HOST, "port": MILVUS_PORT}
     )

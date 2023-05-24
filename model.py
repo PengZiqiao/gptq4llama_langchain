@@ -235,8 +235,9 @@ from config import LLM_HOST, LLM_PORT, GENERATE_PARAMS
 def generate(prompt, **params):
     url = f"http://{LLM_HOST}:{LLM_PORT}/generate/"
     headers = {"Content-Type": "application/json"}
-    params = GENERATE_PARAMS.copy().update(params)
-    data = json.dumps(dict(prompt=prompt, params=params))
+    params_ = GENERATE_PARAMS.copy()
+    params_.update(params)
+    data = json.dumps(dict(prompt=prompt, params=params_))
 
     res = requests.post(url, headers=headers, data=data)
     return res.text
@@ -244,9 +245,10 @@ def generate(prompt, **params):
 def streaming_generate(prompt, **params):
     url = f"http://{LLM_HOST}:{LLM_PORT}/streaming_generate/"
     headers = {"Content-Type": "application/json"}
-    params = GENERATE_PARAMS.copy().update(params)
-    data = json.dumps(dict(prompt=prompt, params=params))
-
+    params_ = GENERATE_PARAMS.copy()
+    params_.update(params)
+    data = json.dumps(dict(prompt=prompt, params=params_))
+    
     res = requests.post(url, headers=headers, data=data, stream=True)
     client = SSEClient(res).events()
     # 解析返回数据，使用：each.data for each in client

@@ -5,7 +5,7 @@ from sse_starlette.sse import EventSourceResponse
 from pydantic import BaseModel
 from model import GPTQModel
 from langchain.prompts import load_prompt
-from config import HUMAN_PREFIX, AI_PREFIX
+from config import HUMAN_PREFIX, AI_PREFIX, GENERATE_PARAMS
 from langchain.memory import ConversationBufferMemory
 
 app = FastAPI()
@@ -25,7 +25,7 @@ gptq = GPTQModel(AUTO_TYPE, **MODEL_PARAMS)
 
 class GenerateParams(BaseModel):
     prompt: str
-    params: Union[dict, None] = None
+    params: Union[dict, None] = GENERATE_PARAMS
 
 
 @app.post("/generate/")
@@ -35,6 +35,7 @@ async def generate(item: GenerateParams):
 
 @app.post("/streaming_generate/")
 async def streaming_generate(item: GenerateParams):
+    print(item)
     return EventSourceResponse(
         gptq(item.prompt, streaming=True, **item.params), media_type="text/event-stream"
     )
